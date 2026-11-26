@@ -1,0 +1,11 @@
+starting from paused=True, 3 prior runs recorded
+
+--- run 4: RECOVER->unpause (price 60) ---
+  guardian reserves: 0.2490 lREACT
+  event tx 0xf280c196f37e7a3212b75b78dbdaf155d86a1f1249c62e541646dbbbd8cf7a52 block 64025410 ts 1795726950
+  vault paused=False after 3.8s of polling
+  FAILED run 4: RuntimeError: cast logs --from-block 64025410 failed: 
+
+=== 3 successful crossings ===
+latencies (s): [1, 1, 2]
+p50: 1s  min: 1s  max: 2s

@@ -1,0 +1,5 @@
+starting from paused=True, 0 prior runs recorded
+
+--- run 1: RECOVER->unpause (price 60) ---
+  guardian reserves: 0.2802 lREACT
+  FAILED run 1: HTTPError: HTTP Error 403: Forbidden

@@ -1,0 +1,9 @@
+starting from paused=False, 2 prior runs recorded
+
+--- run 3: BREACH->pause (price 40) ---
+  guardian reserves: 0.2637 lREACT
+  FAILED run 3: RuntimeError: eth_getBlockByNumber failed after 4 tries: HTTP Error 405: Method Not Allowed
+
+=== 2 successful crossings ===
+latencies (s): [1, 2]
+p50: 2s  min: 1s  max: 2s

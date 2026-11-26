@@ -1,0 +1,12 @@
+out/
+cache/
+broadcast/*/run-*.json
+!broadcast/*/run-latest.json
+.env
+.DS_Store
+
+scripts/env.sh
+scripts/video_frames/
+scripts/*.mp3
+scripts/concat.txt
+demo-video.mp4

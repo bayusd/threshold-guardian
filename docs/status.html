@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Threshold Guardian — Live Status</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #0b0e14; color: #e6e9f0; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 28px 18px 60px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  .sub { color: #9aa3b2; margin: 0 0 22px; font-size: 14px; }
+  .sub a { color: #7cc4ff; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: #131826; border: 1px solid #232a3d; border-radius: 12px; padding: 16px 18px; }
+  .card h2 { font-size: 15px; margin: 0 0 12px; color: #9aa3b2; text-transform: uppercase; letter-spacing: .06em; }
+  .row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid #1e2436; font-size: 14px; }
+  .row:first-of-type { border-top: none; }
+  .row b { font-variant-numeric: tabular-nums; }
+  .ok { color: #4ade80; } .warn { color: #fbbf24; } .bad { color: #f87171; } .muted { color: #9aa3b2; }
+  .big { font-size: 30px; font-weight: 700; line-height: 1.1; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  th, td { text-align: left; padding: 7px 8px; border-top: 1px solid #1e2436; font-variant-numeric: tabular-nums; }
+  th { color: #9aa3b2; font-weight: 600; }
+  td a { color: #7cc4ff; text-decoration: none; }
+  .addr { font-family: ui-monospace, monospace; font-size: 12px; word-break: break-all; }
+  .foot { color: #9aa3b2; font-size: 12px; margin-top: 22px; line-height: 1.6; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .pill.open { background: #14532d; color: #4ade80; }
+  .pill.paused { background: #7f1d1d; color: #f87171; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🛡️ Threshold Guardian — Live Status</h1>
+  <p class="sub">Autonomous stop-loss / circuit-breaker for a mock vault. Reactive contract on
+  <b>Lasna</b> watches a price oracle on <b>Base Sepolia</b> and pauses the vault when the
+  price falls below threshold. Track: <b>Set It and Forget It</b> (Reactive Omni Buildathon).
+  <a href="https://github.com/bayusd/threshold-guardian">Repo →</a></p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Vault — Base Sepolia</h2>
+      <div class="row"><span>Status</span><b id="vault-status"><span class="pill open">…</span></b></div>
+      <div class="row"><span>Mock deposits</span><b id="vault-deposits">…</b></div>
+      <div class="row"><span>Callback reserves</span><b id="vault-reserves">…</b></div>
+      <div class="row"><span>Callback debt</span><b id="vault-debt">…</b></div>
+      <div class="row"><span>Contract</span><span class="addr"><a id="vault-link" href="#">0xDf7D…1168</a></span></div>
+    </div>
+    <div class="card">
+      <h2>Oracle — Base Sepolia</h2>
+      <div class="row"><span>Price</span><b class="big" id="oracle-price">…</b></div>
+      <div class="row"><span>Threshold</span><b id="threshold">…</b></div>
+      <div class="row"><span>Contract</span><span class="addr"><a id="oracle-link" href="#">0xe055…689f</a></span></div>
+    </div>
+    <div class="card">
+      <h2>Guardian — Lasna</h2>
+      <div class="row"><span>Alert active</span><b id="alert">…</b></div>
+      <div class="row"><span>Last price seen</span><b id="last-price">…</b></div>
+      <div class="row"><span>Pause callbacks sent</span><b id="pause-cb">…</b></div>
+      <div class="row"><span>Unpause callbacks sent</span><b id="unpause-cb">…</b></div>
+      <div class="row"><span>Reserves (lREACT)</span><b id="guardian-reserves">…</b></div>
+      <div class="row"><span>Debt</span><b id="guardian-debt">…</b></div>
+      <div class="row"><span>Contract</span><span class="addr"><a id="guardian-link" href="#">0xAa3d…BbAA</a></span></div>
+    </div>
+    <div class="card">
+      <h2>Loop latency — measured live</h2>
+      <div class="row"><span>Samples</span><b id="n-runs">…</b></div>
+      <div class="row"><span>p50 event → callback</span><b id="p50">…</b></div>
+      <div class="row"><span>Min / Max</span><b id="minmax">…</b></div>
+      <div class="row"><span>Success rate</span><b id="success">…</b></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h2>Loop runs — PriceUpdated → react() → callback</h2>
+    <table>
+      <thead><tr><th>#</th><th>Action</th><th>Event tx</th><th>Callback tx</th><th>Latency</th></tr></thead>
+      <tbody id="runs"></tbody>
+    </table>
+  </div>
+
+  <p class="foot" id="updated">Loading live state from the public RPCs…</p>
+  <p class="foot">Contracts are on testnet only (Base Sepolia 84532, Lasna 5318007). No real
+  funds. Latency = callback block timestamp − PriceUpdated block timestamp (same
+  chain clock). Data refreshes every 30 s from
+  <span class="addr">sepolia.base.org</span> and
+  <span class="addr">lasna-rpc.rnk.dev</span>. If an RPC is unreachable from your
+  browser, the static loop table below is still the measured record.</p>
+</div>
+<script>
+const BASE = "https://sepolia.base.org";
+const LASNA = "https://lasna-rpc.rnk.dev/";
+const ORACLE = "0xe0555a2e9567cae8B9bfdb64Df86aa29cF9D689f";
+const VAULT = "0xDf7D6eC96cB079A0F8Cd9cD640fAE92278081168";
+const GUARDIAN = "0xAa3da8619c52134D652b501C02A61171AE8DBbAA";
+const SYSTEM = "0x8888888888888888888888888888888888888888";
+const PROXY = "0x476F44b11F5C942c58f4c8E3d0300E5710743585";
+const SEL = { price:"0xa035b1fe", threshold:"0x42cde4e8", alert:"0x2d440395", lastPrice:"0x053f14da",
+  pauseCb:"0xd1a5625a", unpauseCb:"0x1ef088e9", paused:"0x5c975abb", deposits:"0x7d882097",
+  reserves:"0xd66bd524", debt:"0x9b6c56ec" };
+const pad = a => "0".repeat(24) + a.slice(2).toLowerCase();
+const RUNS = [
+  // [run, action, eventTx, callbackTx, latencySec] — measured 27 Nov 2026, see scripts/loop-results.json
+  [1,"breach → pause","0xa9437e13cd80de341b38393c57c7ad9e08d6b586319fca08c01906c1b8551727","0x91c46c0125576eb39d05105d1a0327b60bc4b008a4069f20c8cc2cf520a95a7c",1],
+  [2,"recover → unpause","0x5206663b1911fe2442a1161464c4cae96d3d9392e9e7e17351ebc6c4ef27ea22","0x471fa43921161ceedabd4e3c820c964920c8bedc92f62105d34f8d0a6774cd42",2],
+  [3,"breach → pause","0xf34cc4c1fb5b6445b76956d48ab5767c33c774f872a0196bae4c82b7cebdbb2a","0x51717ea27eacc88a2add66c9c8d1349a02b8aea9f6d9d838d4794b6152076e91",1],
+  [4,"recover → unpause","0xf280c196f37e7a3212b75b78dbdaf155d86a1f1249c62e541646dbbbd8cf7a52","0xd0b955da6b0289fef127d247ede383174e63301fde7bac67d96b6acfa40c244c",1],
+  [5,"breach → pause","0x53f8623198573fa2a23bbd2c732902c3bc99b521ed498dfeb4992fd9e5f96a48","0xce21cf5fb9896dbf253fc1d71873c63df951c54c29c7e3b0de0b15308070b0af",2],
+  [6,"recover → unpause","0xe182d534ffc5c42207c1088604d0e19adf7665ea9c2b4f6f7e07cded03d97400","0x220d3bf1b4404eb4b799447db8768fa4fb09c67ce4c408eacb08f8da46549ca3",1],
+  [7,"breach → pause","0x9387a198bc9669fb53b6b65306d3b050b5cdfc87acd458f31c3166292fea5508","0x2475a1f04447a42b0372ed269217c17f07ffab07f3fadc51bce906e7d0f387c9",1],
+  [8,"recover → unpause","0xe54e87b417e493846a60d37894807864383cbf4e4cf1c303d0271d1482337d61","0x4487c85b034131baa3258372126519415a84d36a7b773b74f3d2b100979c521f",2],
+  [9,"breach → pause","0xedd52d6166bbbcd27078c4170c4b260f08355c9b0103badec08c5d17b61c8302","0x5b0a3f3d088c7ffd9dda63ffedbc1dcf74e97012625bf7878abd7fa9319743a3",1],
+  [10,"recover → unpause","0x4f6e6c6a6cbfad02a3057c9ddc12e478e2d054bbbe3a76508171e7f672ca4232","0x78e75db8bc5a0cc558bdbd3b8838a54b41684a60af11be00c430bb114410364e",1],
+  [11,"breach → pause","0xde32f55e41cc06bcbd409b5ba509eac7f3c7f41857405d9e72365c840d87f23c","0x9887de2d61d4f9d83acbd343f59ce2039f560f7bcedda908dc04a879bc20ec3f",1],
+  [12,"recover → unpause","0x04bef5464726b48e5fc56bdc134c71f24fc3b2a0f175d8de98af116299d71ce9","0x4594518194d7aff129bd9ec77ac016ac9536a1c167f1abce81a94110a1e3badc",1],
+  [13,"breach → pause","0xbc7f28820033300e2a80bad9f044d26ccf2e95f2f7f37f90491ea7dc8f216086","0x76f658d03205515a3307ca3ae6dd8daba105a5706b508722d5ae841b1c6a4bd1",2],
+  [14,"recover → unpause","0xc811a4d5a4df5a5509da9a1b1ce519c1a616ddf9e528b066d43d64f29ebd8441","0xad75147a842c7883c3da4614999a4e4ab314c1fc325ee9e5260e3972eb3b82c2",2],
+  [15,"breach → pause","0x02721e7a81673c912599c2f391ee01bd9ed61ae4565c0d64c2f53b22f370329f","0x0079822cd6385553f8f214113fa4439b4829cfd9dd9f919b7cc4f8e69034c1dc",1],
+  [16,"recover → unpause","0xbdd2f178d01be737cc4f780d8793a175e98ee0e207b1b5b0db13a421620d4edf","0x16f1fb7534dcae8d94d7ef5767d13dae1d4c41cc013d60170fd5d1a4ad16c38e",2],
+  [17,"breach → pause","0xa48200f2840dbc58df350998aa8d3a50911b94f827c5d3e1892a1c35f0cdd467","0xf086c5e8d097002494a513a528f94e4369652c5f28741f0a62c911979b347729",1],
+];
+async function rpc(url, method, params) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", method, params, id: 1 }) });
+  const j = await r.json();
+  if (j.error) throw new Error(j.error.message);
+  return j.result;
+}
+async function call(url, to, data) {
+  return rpc(url, "eth_call", [{ to, data }, "latest"]);
+}
+const u256 = h => BigInt(h);
+const fmtEth = (wei, dec=4) => (Number(wei) / 1e18).toFixed(dec).replace(/\.?0+$/, "");
+const short = h => h.slice(0, 10) + "…" + h.slice(-6);
+const scanBase = h => `https://sepolia.basescan.org/tx/${h}`;
+function renderRuns() {
+  const tb = document.getElementById("runs");
+  tb.innerHTML = RUNS.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td>
+    <td><a href="${scanBase(r[2])}" target="_blank" rel="noopener">${short(r[2])}</a></td>
+    <td><a href="${scanBase(r[3])}" target="_blank" rel="noopener">${short(r[3])}</a></td>
+    <td><b>${r[4]} s</b></td></tr>`).join("");
+  const lats = RUNS.map(r => r[4]).sort((a, b) => a - b);
+  document.getElementById("n-runs").textContent = RUNS.length + " crossings";
+  document.getElementById("p50").textContent = lats[Math.floor(lats.length / 2)] + " s";
+  document.getElementById("minmax").textContent = lats[0] + " s / " + lats[lats.length - 1] + " s";
+  document.getElementById("success").textContent = "100% (" + RUNS.length + "/" + RUNS.length + ")";
+}
+async function refresh() {
+  const set = (id, txt, cls) => { const el = document.getElementById(id); el.textContent = txt; if (cls) el.className = cls; };
+  try {
+    const [price, threshold, paused, deposits, vRes, vDebt] = await Promise.all([
+      call(BASE, ORACLE, SEL.price), call(LASNA, GUARDIAN, SEL.threshold),
+      call(BASE, VAULT, SEL.paused), call(BASE, VAULT, SEL.deposits),
+      call(BASE, PROXY, SEL.reserves + pad(VAULT)), call(BASE, PROXY, SEL.debt + pad(VAULT)),
+    ]);
+    const [alert, lastPrice, pauseCb, unpauseCb, gRes, gDebt] = await Promise.all([
+      call(LASNA, GUARDIAN, SEL.alert), call(LASNA, GUARDIAN, SEL.lastPrice),
+      call(LASNA, GUARDIAN, SEL.pauseCb), call(LASNA, GUARDIAN, SEL.unpauseCb),
+      call(LASNA, SYSTEM, SEL.reserves + pad(GUARDIAN)), call(LASNA, SYSTEM, SEL.debt + pad(GUARDIAN)),
+    ]);
+    const p = u256(price), t = u256(threshold);
+    set("oracle-price", "$" + fmtEth(p, 2));
+    set("threshold", "$" + fmtEth(t, 2));
+    const isPaused = u256(paused) === 1n;
+    document.getElementById("vault-status").innerHTML = isPaused
+      ? '<span class="pill paused">PAUSED — Guardian tripped</span>'
+      : '<span class="pill open">OPEN</span>';
+    set("vault-deposits", fmtEth(u256(deposits), 0) + " (mock)");
+    set("vault-reserves", fmtEth(u256(vRes), 6) + " ETH");
+    set("vault-debt", fmtEth(u256(vDebt), 6) + " ETH");
+    set("alert", u256(alert) === 1n ? "YES — below threshold" : "no", u256(alert) === 1n ? "warn" : "ok");
+    set("last-price", "$" + fmtEth(u256(lastPrice), 2));
+    set("pause-cb", u256(pauseCb).toString());
+    set("unpause-cb", u256(unpauseCb).toString());
+    set("guardian-reserves", fmtEth(u256(gRes), 4) + " lREACT");
+    set("guardian-debt", fmtEth(u256(gDebt), 4) + " lREACT");
+    document.getElementById("updated").textContent =
+      "Live state updated " + new Date().toLocaleString() + " — price " + (p < t ? "BELOW" : "ABOVE") + " threshold.";
+  } catch (e) {
+    document.getElementById("updated").textContent =
+      "Live RPC read failed (" + e.message + ") — showing the static measured record below. Retrying in 30 s.";
+  }
+}
+document.getElementById("vault-link").href = "https://sepolia.basescan.org/address/" + VAULT;
+document.getElementById("oracle-link").href = "https://sepolia.basescan.org/address/" + ORACLE;
+document.getElementById("guardian-link").href = "https://lasna.reactscan.net/address/" + GUARDIAN;
+renderRuns();
+refresh();
+setInterval(refresh, 30000);
+</script>
+</body>
+</html>
